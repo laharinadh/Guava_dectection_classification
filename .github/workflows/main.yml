@@ -1,4 +1,4 @@
-name: Run Python Script
+name: Deploy Streamlit App
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
   workflow_dispatch:  # Allows manual trigger
 
 jobs:
-  run-script:
+  deploy:
     runs-on: ubuntu-latest
 
     steps:
@@ -19,11 +19,13 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'  # Specify your Python version
+          python-version: '3.10'  # Specify Python version
 
       - name: Install dependencies
         run: |
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-      - name: Run Python script
-        run: python app.py  # Replace with your actual script filename
+      - name: Run Streamlit App
+        run: |
+          streamlit run app.py --server.headless true
