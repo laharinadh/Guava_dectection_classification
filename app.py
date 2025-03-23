@@ -85,12 +85,12 @@ disease_prevention = {
 # Load YOLOv8s model for object detection
 @st.cache_resource
 def load_yolo_model():
-    return YOLO('C:\\Users\\rlaha\\OneDrive\\Desktop\\app\\guava-disease-detection\\models\\best.pt')  # Pretrained YOLOv8s model
+    return YOLO('\models\best.pt')  # Pretrained YOLOv8s model
 
 # Load DenseNet-201 model for classification (TensorFlow/Keras)
 @st.cache_resource
 def load_keras_model():
-    return tf.keras.models.load_model('C:\\Users\\rlaha\\OneDrive\\Desktop\\app\\guava-disease-detection\\models\\fine_epoch_64.h5')
+    return tf.keras.models.load_model('\models\fine_epoch_64.h5')
 
 # Define preprocessing for DenseNet-201 (TensorFlow/Keras)
 def preprocess_image(image):
