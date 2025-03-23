@@ -26,4 +26,4 @@ jobs:
           pip install -r requirements.txt || echo "No requirements file"
 
       - name: Run Python script
-        run: python script.py  # Replace with your actual script filename
+        run: python app.py  # Replace with your actual script filename
