@@ -1,9 +1,8 @@
-import os
-import json
+import streamlit as st
 import torch
 import cv2
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 from ultralytics import YOLO  # For YOLOv8
 import tensorflow as tf  # For TensorFlow/Keras
 
@@ -27,7 +26,7 @@ disease_classes = [
 # Define YOLO class labels
 yolo_labels = ['Guava Fruit', 'Guava Leaf', 'Guava Stem']
 
-# Disease prevention tips
+# Disease prevention tips (updated with detailed information)
 disease_prevention = {
     "Stem_canker": (
         "Fungal infection",
@@ -84,12 +83,14 @@ disease_prevention = {
 }
 
 # Load YOLOv8s model for object detection
+@st.cache_resource
 def load_yolo_model():
-    return YOLO('models/best.pt')  # Pretrained YOLOv8s model
+    return YOLO('models\best.pt')  # Pretrained YOLOv8s model
 
 # Load DenseNet-201 model for classification (TensorFlow/Keras)
+@st.cache_resource
 def load_keras_model():
-    return tf.keras.models.load_model('models/fine_epoch_64.h5')
+    return tf.keras.models.load_model('models\fine_epoch_64.h5')
 
 # Define preprocessing for DenseNet-201 (TensorFlow/Keras)
 def preprocess_image(image):
@@ -114,6 +115,46 @@ def classify_image(keras_model, cropped_image):
     predictions = keras_model.predict(img_tensor)
     predicted_class = np.argmax(predictions, axis=1)[0]  # Get the predicted class
     return predicted_class
+
+# Draw bounding boxes on the image
+def draw_bounding_boxes(image, results):
+    draw = ImageDraw.Draw(image)
+    for result in results:
+        bbox = result['bbox']
+        label = f"{result['detected_object']} ({result['disease_class']})"
+        confidence = result['confidence']
+        draw.rectangle(bbox, outline="lime", width=3)
+        draw.text((bbox[0], bbox[1] - 15), f"{label} {confidence:.2f}", fill="lime")
+    return image
+
+# Sidebar: Index and Upload Section
+def sidebar_index():
+    st.sidebar.title("Guava Farm Doctor 🍃")
+    st.sidebar.markdown("### Uploaded Images")
+    if 'uploaded_images' not in st.session_state:
+        st.session_state.uploaded_images = []
+
+    # Display uploaded images in the sidebar
+    for i, img in enumerate(st.session_state.uploaded_images[:5]):
+        st.sidebar.image(img, caption=f"Image {i+1}", use_column_width=True)
+
+    # Upload new image
+    uploaded_file = st.sidebar.file_uploader("Upload Image", type=["jpg", "jpeg", "png"])
+    if uploaded_file is not None:
+        # Save the uploaded file temporarily
+        image_path = "uploaded_image.jpg"
+        with open(image_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+
+        # Add to session state
+        img = Image.open(uploaded_file)
+        if len(st.session_state.uploaded_images) >= 5:
+            st.session_state.uploaded_images.pop(0)  # Remove oldest image
+        st.session_state.uploaded_images.append(img)
+
+        # Return the path of the uploaded image
+        return image_path
+    return None
 
 # Main pipeline function
 def detection_classification_pipeline(yolo_model, keras_model, image_path):
@@ -145,42 +186,83 @@ def detection_classification_pipeline(yolo_model, keras_model, image_path):
 
         # Append results
         results.append({
-            'bbox': [int(x1), int(y1), int(x2), int(y2)],
-            'confidence': float(conf),
+            'bbox': (x1, y1, x2, y2),
+            'confidence': conf,
             'detected_object': detected_object,
             'disease_class': disease_class
         })
 
-    return results
+    return results, image_rgb
 
-# Save results to a JSON file
-def save_results(results, output_file):
-    with open(output_file, 'w') as f:
-        json.dump(results, f, indent=4)
-
-# Main function
+# Streamlit UI
 def main():
-    # Load models
-    yolo_model = load_yolo_model()
-    keras_model = load_keras_model()
+    # Title
+    st.title("Guava Farm Doctor 🍃")
 
-    # Directory containing test images
-    test_images_dir = "test_images"
-    output_dir = "results"
-    os.makedirs(output_dir, exist_ok=True)
+    # Sidebar: Index and Upload Section
+    image_path = sidebar_index()
 
-    # Process all images in the test directory
-    for image_name in os.listdir(test_images_dir):
-        image_path = os.path.join(test_images_dir, image_name)
-        print(f"Processing {image_path}...")
+    if image_path:
+        # Load models
+        yolo_model = load_yolo_model()
+        keras_model = load_keras_model()
 
-        # Run the pipeline
-        results = detection_classification_pipeline(yolo_model, keras_model, image_path)
+        # Process the image
+        with st.spinner("Processing image..."):
+            results, image_rgb = detection_classification_pipeline(yolo_model, keras_model, image_path)
 
-        # Save results to a JSON file
-        output_file = os.path.join(output_dir, f"{os.path.splitext(image_name)[0]}_results.json")
-        save_results(results, output_file)
-        print(f"Results saved to {output_file}")
+        # Two-column layout
+        col1, col2 = st.columns([2, 1])
 
+        # Column 1: Annotated image and classification results
+        with col1:
+            st.subheader("Annotated Image")
+            annotated_image = Image.fromarray(image_rgb)
+            annotated_image = draw_bounding_boxes(annotated_image, results)
+            st.image(annotated_image, caption="Annotated Image", use_column_width=True)
+
+            # Display classification results
+            st.subheader("Classification Results")
+            for result in results:
+                disease_class = result['disease_class']
+                detected_object = result['detected_object']
+
+                # Replace "disease" with "healthy" if the classification is healthy
+                if "healthy" in disease_class.lower():
+                    display_disease_class = disease_class.replace("healthy", "Healthy")
+                    st.success(f"Object: {detected_object} | Status: {display_disease_class} | Confidence: {result['confidence']:.2f}")
+                else:
+                    st.success(f"Object: {detected_object} | Disease: {disease_class} | Confidence: {result['confidence']:.2f}")
+
+        # Column 2: Placeholder for additional information
+        with col2:
+            st.subheader("Additional Information")
+            st.info("This section can include metadata, notes, or other details about the image.")
+
+        # Full-width section: Disease prevention tips
+        st.subheader("Prevention and Care Tips")
+        data = []
+        for result in results:
+            disease = result['disease_class']
+            reason, prevention = disease_prevention.get(disease, ("Unknown", "Consult an expert."))
+
+            # Replace "disease" with "healthy" if the classification is healthy
+            if "healthy" in disease.lower():
+                disease = disease.replace("healthy", "Healthy")
+                reason = "No issue detected"
+                prevention = "Maintain regular care and monitoring."
+
+            data.append({"Status": disease, "Cause": reason, "Prevention": prevention})
+
+        # Display as a table
+        if data:
+            st.table(data)
+        else:
+            st.info("No issues detected.")
+
+    else:
+        st.info("Please upload an image to proceed.")
+
+# Run the app
 if __name__ == "__main__":
     main()
