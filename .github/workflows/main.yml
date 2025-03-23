@@ -28,4 +28,4 @@ jobs:
 
       - name: Run Streamlit App
         run: |
-          streamlit run app.py --server.headless true
+          python app.py
